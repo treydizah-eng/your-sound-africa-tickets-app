@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+:root {
+  --brand-gold: #f7a800;
+  --brand-dark: #080810;
+  --brand-card: #12121f;
+  --brand-border: #1e1e30;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: #080810;
+  color: #ffffff;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #12121f;
+}
+::-webkit-scrollbar-thumb {
+  background: #f7a800;
+  border-radius: 3px;
+}
+
+@layer components {
+  .btn-gold {
+    @apply bg-brand-gold text-black font-bold py-3 px-6 rounded-xl hover:bg-brand-gold-light transition-all duration-200 active:scale-95 inline-flex items-center gap-2;
+  }
+
+  .btn-outline {
+    @apply border border-brand-border text-white font-semibold py-3 px-6 rounded-xl hover:border-brand-gold hover:text-brand-gold transition-all duration-200 inline-flex items-center gap-2;
+  }
+
+  .card {
+    @apply bg-brand-card border border-brand-border rounded-2xl;
+  }
+
+  .input-field {
+    @apply w-full bg-brand-card border border-brand-border rounded-xl px-4 py-3 text-white placeholder-brand-muted focus:outline-none focus:border-brand-gold transition-colors duration-200;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-brand-muted mb-1.5;
+  }
+
+  .badge-available {
+    @apply bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold px-2.5 py-1 rounded-full;
+  }
+
+  .badge-limited {
+    @apply bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-semibold px-2.5 py-1 rounded-full;
+  }
+
+  .badge-soldout {
+    @apply bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-semibold px-2.5 py-1 rounded-full;
+  }
+}

@@ -1,0 +1,20 @@
+# YorTicketsAfrica API – Security rules
+# Block direct browser access to config.php and log tables
+<FilesMatch "^(config)\.php$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+# Force HTTPS
+RewriteEngine On
+RewriteCond %{HTTPS} off
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Disable directory listing
+Options -Indexes
+
+# Only allow PHP files to be executed
+<FilesMatch "\.php$">
+    Order Allow,Deny
+    Allow from all
+</FilesMatch>

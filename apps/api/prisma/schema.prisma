@@ -1,0 +1,166 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum ShowStatus {
+  DRAFT
+  PUBLISHED
+  SOLD_OUT
+  CANCELLED
+  COMPLETED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+enum TicketStatus {
+  VALID
+  REDEEMED
+  CANCELLED
+}
+
+enum SyncEventType {
+  SALE
+  REFUND
+  CANCEL
+  SHOW_PUBLISH
+}
+
+// ─── Shows (mirrored from YSAMS) ─────────────────────────────────────────────
+
+model Show {
+  id          String     @id @default(cuid())
+  ysamsId     Int?       @unique
+  title       String
+  slug        String     @unique
+  venue       String
+  city        String
+  country     String     @default("Zimbabwe")
+  showDate    DateTime
+  doorsTime   String?
+  description String?    @db.Text
+  posterUrl   String?
+  mapUrl      String?
+  status      ShowStatus @default(DRAFT)
+  capacity    Int        @default(0)
+  ticketTypes TicketType[]
+  orders      Order[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+// ─── Ticket Types per Show ────────────────────────────────────────────────────
+
+model TicketType {
+  id          String      @id @default(cuid())
+  showId      String
+  show        Show        @relation(fields: [showId], references: [id])
+  ysamsPoolId Int?
+  name        String
+  price       Decimal     @db.Decimal(10, 2)
+  currency    String      @default("USD")
+  totalQty    Int
+  soldQty     Int         @default(0)
+  color       String?
+  sortOrder   Int         @default(0)
+  orderItems  OrderItem[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+// ─── Customers (guest — no login) ────────────────────────────────────────────
+
+model Customer {
+  id        String   @id @default(cuid())
+  firstName String
+  lastName  String
+  email     String
+  phone     String
+  country   String   @default("Zimbabwe")
+  company   String?
+  orders    Order[]
+  createdAt DateTime @default(now())
+}
+
+// ─── Orders ──────────────────────────────────────────────────────────────────
+
+model Order {
+  id            String      @id @default(cuid())
+  bookingRef    String      @unique
+  customerId    String
+  customer      Customer    @relation(fields: [customerId], references: [id])
+  showId        String
+  show          Show        @relation(fields: [showId], references: [id])
+  subtotal      Decimal     @db.Decimal(10, 2)
+  fees          Decimal     @db.Decimal(10, 2) @default(0)
+  total         Decimal     @db.Decimal(10, 2)
+  currency      String      @default("USD")
+  status        OrderStatus @default(PENDING)
+  paymentMethod String?
+  paynowRef     String?
+  pollUrl       String?
+  promoCode     String?
+  items         OrderItem[]
+  tickets       Ticket[]
+  syncedToYsams Boolean     @default(false)
+  emailSentAt   DateTime?
+  whatsappSentAt DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+// ─── Order Items ─────────────────────────────────────────────────────────────
+
+model OrderItem {
+  id           String     @id @default(cuid())
+  orderId      String
+  order        Order      @relation(fields: [orderId], references: [id])
+  ticketTypeId String
+  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id])
+  quantity     Int
+  unitPrice    Decimal    @db.Decimal(10, 2)
+  subtotal     Decimal    @db.Decimal(10, 2)
+}
+
+// ─── Individual Tickets (one per seat / entry) ────────────────────────────────
+
+model Ticket {
+  id           String       @id @default(cuid())
+  ticketCode   String       @unique
+  orderId      String
+  order        Order        @relation(fields: [orderId], references: [id])
+  ticketTypeId String
+  qrPayload    String       @db.Text
+  qrImageUrl   String?
+  pdfUrl       String?
+  status       TicketStatus @default(VALID)
+  redeemedAt   DateTime?
+  createdAt    DateTime     @default(now())
+}
+
+// ─── YSAMS Sync Events (outbound log) ────────────────────────────────────────
+
+model SyncEvent {
+  id        String        @id @default(cuid())
+  eventType SyncEventType
+  orderId   String?
+  payload   Json
+  synced    Boolean       @default(false)
+  syncedAt  DateTime?
+  retries   Int           @default(0)
+  error     String?       @db.Text
+  createdAt DateTime      @default(now())
+}
