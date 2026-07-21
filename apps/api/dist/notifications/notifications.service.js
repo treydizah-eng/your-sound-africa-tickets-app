@@ -1,0 +1,200 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+var NotificationsService_1;
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.NotificationsService = void 0;
+const common_1 = require("@nestjs/common");
+const config_1 = require("@nestjs/config");
+const resend_1 = require("resend");
+const twilio_1 = __importDefault(require("twilio"));
+const prisma_service_1 = require("../prisma/prisma.service");
+let NotificationsService = NotificationsService_1 = class NotificationsService {
+    constructor(config, prisma) {
+        this.config = config;
+        this.prisma = prisma;
+        this.logger = new common_1.Logger(NotificationsService_1.name);
+        this.resend = new resend_1.Resend(this.config.get('RESEND_API_KEY'));
+        const sid = this.config.get('TWILIO_ACCOUNT_SID');
+        const token = this.config.get('TWILIO_AUTH_TOKEN');
+        if (sid && token && sid.startsWith('AC')) {
+            this.twilioClient = (0, twilio_1.default)(sid, token);
+        }
+    }
+    async sendTicketDelivery(order, tickets) {
+        await Promise.allSettled([
+            this.sendEmail(order, tickets),
+            this.sendWhatsApp(order, tickets),
+        ]);
+    }
+    async sendEmail(order, tickets) {
+        try {
+            const html = this.buildTicketEmailHtml(order, tickets);
+            await this.resend.emails.send({
+                from: this.config.get('EMAIL_FROM') || 'tickets@yoticketsafrica.com',
+                to: order.customer.email,
+                subject: `🎫 Your tickets for ${order.show.title} — Booking ${order.bookingRef}`,
+                html,
+            });
+            await this.updateEmailSent(order.id);
+            this.logger.log(`Email sent to ${order.customer.email} for ${order.bookingRef}`);
+        }
+        catch (err) {
+            this.logger.error(`Email failed for ${order.bookingRef}`, err);
+        }
+    }
+    async sendWhatsApp(order, tickets) {
+        if (!this.twilioClient) {
+            this.logger.warn('Twilio not configured — skipping WhatsApp');
+            return;
+        }
+        try {
+            const from = this.config.get('TWILIO_WHATSAPP_FROM') || 'whatsapp:+14155238886';
+            const phone = order.customer.phone.replace(/^\+?/, '+').replace(/[^+\d]/g, '');
+            const to = `whatsapp:${phone.startsWith('+') ? phone : '+' + phone}`;
+            const ticketLines = tickets
+                .map((t, i) => `*Ticket ${i + 1}:* ${t.ticketTypeName}\n📋 Code: \`${t.ticketCode}\``)
+                .join('\n\n');
+            const showDate = new Date(order.show.showDate).toLocaleDateString('en-GB', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+            });
+            const message = [
+                `🎫 *YoTicketsAfrica*`,
+                ``,
+                `Hi ${order.customer.firstName}! Your tickets are confirmed.`,
+                ``,
+                `*${order.show.title}*`,
+                `📅 ${showDate}`,
+                `📍 ${order.show.venue}, ${order.show.city}`,
+                ``,
+                ticketLines,
+                ``,
+                `*Booking Ref:* ${order.bookingRef}`,
+                ``,
+                `Please show the QR code at the gate. Save this message!`,
+                ``,
+                `Questions? Reply to this message or email tickets@yoticketsafrica.com`,
+            ].join('\n');
+            await this.twilioClient.messages.create({ from, to, body: message });
+            if (tickets[0]?.qrImageUrl?.startsWith('data:image')) {
+                this.logger.log('QR is a data URL — skipping media send (attach PDF link instead)');
+            }
+            await this.updateWhatsAppSent(order.id);
+            this.logger.log(`WhatsApp sent to ${to} for ${order.bookingRef}`);
+        }
+        catch (err) {
+            this.logger.error(`WhatsApp failed for ${order.bookingRef}`, err);
+        }
+    }
+    buildTicketEmailHtml(order, tickets) {
+        const showDate = new Date(order.show.showDate).toLocaleDateString('en-GB', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+        });
+        const ticketRows = tickets
+            .map((t) => `
+      <div style="background:#1a1a2e;border:1px solid #f7a800;border-radius:12px;padding:24px;margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div>
+            <p style="color:#f7a800;font-size:12px;margin:0;text-transform:uppercase;letter-spacing:1px;">Ticket</p>
+            <p style="color:#fff;font-size:20px;font-weight:700;margin:4px 0;">${t.ticketTypeName}</p>
+            <p style="color:#9ca3af;font-size:13px;margin:0;">Code: <strong style="color:#fff;">${t.ticketCode}</strong></p>
+          </div>
+        </div>
+        ${t.qrImageUrl && t.qrImageUrl.startsWith('data:image')
+            ? `<div style="text-align:center;margin-top:16px;">
+                <img src="${t.qrImageUrl}" alt="QR Code" style="width:180px;height:180px;border-radius:8px;" />
+                <p style="color:#9ca3af;font-size:11px;margin-top:8px;">Show this QR at the gate</p>
+               </div>`
+            : ''}
+      </div>`)
+            .join('');
+        return `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+    <body style="margin:0;padding:0;background:#080810;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+      <div style="max-width:600px;margin:0 auto;padding:32px 16px;">
+
+        <div style="text-align:center;margin-bottom:32px;">
+          <h1 style="color:#f7a800;font-size:28px;margin:0;font-weight:800;letter-spacing:-1px;">
+            YoTickets<span style="color:#fff;">Africa</span>
+          </h1>
+          <p style="color:#9ca3af;margin:4px 0 0;">Your booking is confirmed ✓</p>
+        </div>
+
+        <div style="background:#12121f;border-radius:16px;padding:24px;margin-bottom:24px;">
+          <h2 style="color:#fff;margin:0 0 8px;font-size:22px;">${order.show.title}</h2>
+          <p style="color:#f7a800;margin:0 0 4px;">📅 ${showDate}</p>
+          <p style="color:#9ca3af;margin:0 0 4px;">📍 ${order.show.venue}, ${order.show.city}</p>
+          <div style="margin-top:16px;padding-top:16px;border-top:1px solid #1e1e30;">
+            <p style="color:#9ca3af;font-size:12px;margin:0;">BOOKING REFERENCE</p>
+            <p style="color:#f7a800;font-size:24px;font-weight:700;margin:4px 0;letter-spacing:2px;">${order.bookingRef}</p>
+          </div>
+        </div>
+
+        ${ticketRows}
+
+        <div style="background:#12121f;border-radius:12px;padding:20px;margin-top:24px;">
+          <p style="color:#fff;font-weight:700;margin:0 0 8px;">Order Summary</p>
+          <p style="color:#9ca3af;margin:0 0 4px;">Name: <span style="color:#fff;">${order.customer.firstName} ${order.customer.lastName}</span></p>
+          <p style="color:#9ca3af;margin:0 0 4px;">Email: <span style="color:#fff;">${order.customer.email}</span></p>
+          <p style="color:#9ca3af;margin:0;font-weight:700;">Total Paid: <span style="color:#f7a800;">$${Number(order.total).toFixed(2)}</span></p>
+        </div>
+
+        <div style="text-align:center;margin-top:32px;">
+          <p style="color:#6b7280;font-size:12px;">
+            YoTicketsAfrica · tickets@yoticketsafrica.com<br>
+            This email was sent to ${order.customer.email}
+          </p>
+        </div>
+
+      </div>
+    </body>
+    </html>`;
+    }
+    async updateEmailSent(orderId) {
+        try {
+            await this.prisma.order.update({
+                where: { id: orderId },
+                data: { emailSentAt: new Date() },
+            });
+        }
+        catch (err) {
+            this.logger.warn(`Could not update emailSentAt for order ${orderId}`, err);
+        }
+    }
+    async updateWhatsAppSent(orderId) {
+        try {
+            await this.prisma.order.update({
+                where: { id: orderId },
+                data: { whatsappSentAt: new Date() },
+            });
+        }
+        catch (err) {
+            this.logger.warn(`Could not update whatsappSentAt for order ${orderId}`, err);
+        }
+    }
+};
+exports.NotificationsService = NotificationsService;
+exports.NotificationsService = NotificationsService = NotificationsService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [config_1.ConfigService,
+        prisma_service_1.PrismaService])
+], NotificationsService);
+//# sourceMappingURL=notifications.service.js.map
