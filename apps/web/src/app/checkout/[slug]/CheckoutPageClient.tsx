@@ -48,7 +48,7 @@ export default function CheckoutPageClient() {
     getShow(slug)
       .then((s) => { setShow(s); setLoading(false); })
       .catch(() => { setLoading(false); router.push('/events'); });
-  }, [slug]);
+  }, [slug, router]);
 
   const updateQty = (id: string, delta: number) => {
     setQuantities((prev) => {
