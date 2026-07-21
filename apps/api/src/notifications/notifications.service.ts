@@ -7,14 +7,17 @@ import { PrismaService } from '../prisma/prisma.service';
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
-  private resend: Resend;
+  private resend: Resend | null = null;
   private twilioClient: any;
 
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
   ) {
-    this.resend = new Resend(this.config.get('RESEND_API_KEY'));
+    const resendKey = this.config.get('RESEND_API_KEY');
+    if (resendKey && resendKey.startsWith('re_')) {
+      this.resend = new Resend(resendKey);
+    }
 
     const sid = this.config.get('TWILIO_ACCOUNT_SID');
     const token = this.config.get('TWILIO_AUTH_TOKEN');
@@ -31,6 +34,10 @@ export class NotificationsService {
   }
 
   private async sendEmail(order: any, tickets: any[]) {
+    if (!this.resend) {
+      this.logger.warn('Resend not configured — skipping email delivery');
+      return;
+    }
     try {
       const html = this.buildTicketEmailHtml(order, tickets);
       await this.resend.emails.send({
