@@ -1,37 +1,47 @@
-import { notFound } from 'next/navigation';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Calendar, MapPin, Clock, Users, ArrowLeft, ArrowRight, Ticket } from 'lucide-react';
+import { Calendar, MapPin, Clock, ArrowLeft, ArrowRight, Ticket } from 'lucide-react';
 import { CountdownTimer } from '@/components/CountdownTimer';
 import { getShow } from '@/lib/api';
 import { formatDate, formatTime, formatCurrency, getAvailabilityInfo } from '@/lib/utils';
-import type { Metadata } from 'next';
+import type { Show } from '@/types';
 
-interface Props {
-  params: Promise<{ slug: string }>;
-}
+export default function EventPage() {
+  const params = useParams();
+  const slug = params.slug as string;
+  const [show, setShow] = useState<Show | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  try {
-    const { slug } = await params;
-    const show = await getShow(slug);
-    return {
-      title: show.title,
-      description: `Buy tickets for ${show.title} at ${show.venue}, ${show.city} on ${formatDate(show.showDate)}.`,
-    };
-  } catch {
-    return { title: 'Event Not Found' };
+  useEffect(() => {
+    if (!slug) return;
+    getShow(slug)
+      .then(setShow)
+      .catch(() => setNotFound(true))
+      .finally(() => setLoading(false));
+  }, [slug]);
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
+        <div className="w-10 h-10 border-2 border-brand-gold border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-brand-muted text-sm">Loading event...</p>
+      </div>
+    );
   }
-}
 
-export const revalidate = 60;
-
-export default async function EventPage({ params }: Props) {
-  const { slug } = await params;
-  let show;
-  try {
-    show = await getShow(slug);
-  } catch {
-    notFound();
+  if (notFound || !show) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
+        <Ticket size={48} className="text-brand-muted mx-auto mb-4" />
+        <h1 className="text-white text-2xl font-bold mb-2">Event Not Found</h1>
+        <p className="text-brand-muted mb-6">This event doesn&apos;t exist or has been removed.</p>
+        <Link href="/events" className="btn-gold">Back to Events</Link>
+      </div>
+    );
   }
 
   const isSoldOut = show.status === 'SOLD_OUT';
