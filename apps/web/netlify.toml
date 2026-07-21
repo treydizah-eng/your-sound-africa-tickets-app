@@ -5,6 +5,13 @@
 [build.environment]
   NODE_VERSION = "20"
   NEXT_TELEMETRY_DISABLED = "1"
+  NEXT_PUBLIC_API_URL = "https://your-sound-africa-tickets-app.onrender.com"
+
+[functions]
+  node_bundler = "esbuild"
+
+[functions."___netlify-server-handler"]
+  timeout = 26
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"

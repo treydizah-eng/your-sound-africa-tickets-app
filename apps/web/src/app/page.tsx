@@ -1,3 +1,6 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, Shield, Zap, MessageCircle, Star, Ticket } from 'lucide-react';
 import { EventCard } from '@/components/EventCard';
@@ -5,14 +8,6 @@ import { CountdownTimer } from '@/components/CountdownTimer';
 import { getShows } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import type { Show } from '@/types';
-
-async function getPublishedShows(): Promise<Show[]> {
-  try {
-    return await getShows();
-  } catch {
-    return [];
-  }
-}
 
 const features = [
   {
@@ -32,8 +27,17 @@ const features = [
   },
 ];
 
-export default async function HomePage() {
-  const shows = await getPublishedShows();
+export default function HomePage() {
+  const [shows, setShows] = useState<Show[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getShows()
+      .then(setShows)
+      .catch(() => setShows([]))
+      .finally(() => setLoading(false));
+  }, []);
+
   const nextShow = shows[0];
 
   return (
@@ -78,7 +82,7 @@ export default async function HomePage() {
             </div>
           </div>
 
-          {nextShow && (
+          {!loading && nextShow && (
             <div className="mt-14 card p-6 max-w-lg">
               <p className="text-brand-muted text-xs font-semibold uppercase tracking-wider mb-3">
                 Next Event
@@ -110,7 +114,12 @@ export default async function HomePage() {
           </Link>
         </div>
 
-        {shows.length === 0 ? (
+        {loading ? (
+          <div className="card p-12 text-center">
+            <div className="w-10 h-10 border-2 border-brand-gold border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-brand-muted text-sm">Loading events...</p>
+          </div>
+        ) : shows.length === 0 ? (
           <div className="card p-12 text-center">
             <Ticket size={40} className="text-brand-muted mx-auto mb-4" />
             <h3 className="text-white font-semibold mb-2">No events scheduled yet</h3>

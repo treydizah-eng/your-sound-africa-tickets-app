@@ -1,26 +1,21 @@
-import { Ticket, Search } from 'lucide-react';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { Ticket } from 'lucide-react';
 import { EventCard } from '@/components/EventCard';
 import { getShows } from '@/lib/api';
 import type { Show } from '@/types';
-import type { Metadata } from 'next';
 
-export const metadata: Metadata = {
-  title: 'All Events',
-  description: 'Browse all upcoming Michael Mahendere events and buy tickets securely.',
-};
+export default function EventsPage() {
+  const [shows, setShows] = useState<Show[]>([]);
+  const [loading, setLoading] = useState(true);
 
-export const revalidate = 60;
-
-async function getPublishedShows(): Promise<Show[]> {
-  try {
-    return await getShows();
-  } catch {
-    return [];
-  }
-}
-
-export default async function EventsPage() {
-  const shows = await getPublishedShows();
+  useEffect(() => {
+    getShows()
+      .then(setShows)
+      .catch(() => setShows([]))
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -32,13 +27,20 @@ export default async function EventsPage() {
           Upcoming Shows
         </h1>
         <p className="text-brand-muted">
-          {shows.length > 0
+          {loading
+            ? 'Loading events...'
+            : shows.length > 0
             ? `${shows.length} event${shows.length !== 1 ? 's' : ''} available`
             : 'No events currently scheduled'}
         </p>
       </div>
 
-      {shows.length === 0 ? (
+      {loading ? (
+        <div className="card p-16 text-center">
+          <div className="w-10 h-10 border-2 border-brand-gold border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-brand-muted text-sm">Loading events...</p>
+        </div>
+      ) : shows.length === 0 ? (
         <div className="card p-16 text-center">
           <Ticket size={48} className="text-brand-muted mx-auto mb-4" />
           <h2 className="text-white font-semibold text-xl mb-2">No Events Yet</h2>
@@ -54,7 +56,6 @@ export default async function EventsPage() {
               <EventCard show={shows[0]} featured />
             </div>
           )}
-
           {shows.length > 1 && (
             <>
               <h2 className="text-white font-bold text-xl mb-5 mt-10">More Events</h2>
